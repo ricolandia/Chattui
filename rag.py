@@ -406,3 +406,116 @@ class RagStore:
         count_row = self.conn.execute("SELECT COUNT(*) AS c FROM rag_chunks").fetchone()
         sources = {r["source"] for r in self.conn.execute("SELECT DISTINCT source FROM rag_chunks")}
         return (count_row["c"] if count_row else 0), sources
+
+    # ------------------------------------------------- duplicatas
+
+    async def dupes(
+        self,
+        lib: str | None = None,
+        limiar: float = 0.92,
+        max_groups: int = 10,
+    ) -> list[dict]:
+        """Trechos quase duplicados SEMANTICAMENTE (doc×doc na própria matriz).
+
+        Compara os vetores de documento armazenados (sem novos embeddings),
+        agrupa pares acima do limiar com union-find e devolve grupos com
+        fonte/trecho/score. Pares da MESMA fonte são ignorados (espelhar o
+        mesmo arquivo em duas libs é intencional)."""
+        async with self._lock:
+            import numpy as np
+
+            count, _dims = self._ensure_matrix()
+            ids = self._ids_cache or []
+            if count < 2 or len(ids) < 2:
+                return []
+            meta: dict[int, tuple[str, str]] = {}
+            for rid, src, l in self.conn.execute("SELECT id, source, lib FROM rag_chunks").fetchall():
+                meta[int(rid)] = (str(src), str(l))
+            sel = [p for p, rid in enumerate(ids) if lib is None or meta.get(rid, ("", ""))[1] == lib]
+            if len(sel) < 2:
+                return []
+
+            limiar = float(limiar)
+            max_groups = max(1, int(max_groups))
+            mm = np.load(self._matrix_file, mmap_mode="r")
+            edges: list[tuple[float, int, int]] = []
+            cap = 250_000  # trava de segurança contra cliques gigantes
+            overflow = False
+            block = 512
+            try:
+                m = len(sel)
+                for a0 in range(0, m, block):
+                    a1 = min(a0 + block, m)
+                    rows_a = mm[sel[a0:a1]]
+                    for b0 in range(a0, m, block):
+                        b1 = min(b0 + block, m)
+                        sims = rows_a @ mm[sel[b0:b1]].T
+                        y, x = np.nonzero(sims >= limiar)
+                        for ii, jj in zip(y.tolist(), x.tolist()):
+                            if a0 == b0 and jj <= ii:
+                                continue  # triangular: só i < j dentro do bloco
+                            gi = sel[a0 + ii]
+                            gj = sel[b0 + jj]
+                            rid_i = ids[gi]
+                            rid_j = ids[gj]
+                            if meta.get(rid_i, ("", ""))[0] == meta.get(rid_j, ("", ""))[0]:
+                                continue  # mesma fonte (espelho intencional)
+                            edges.append((float(sims[ii, jj]), gi, gj))
+                            if len(edges) > cap:
+                                overflow = True
+                                break
+                        if overflow:
+                            break
+                    if overflow:
+                        break
+            finally:
+                del mm
+            if not edges:
+                return []
+
+            parent: dict[int, int] = {}
+            for _, i, j in edges:
+                parent.setdefault(i, i)
+                parent.setdefault(j, j)
+
+            def find(node: int) -> int:
+                while parent[node] != node:
+                    parent[node] = parent[parent[node]]
+                    node = parent[node]
+                return node
+
+            for _, i, j in edges:
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[ri] = rj
+            best: dict[int, float] = {}
+            members: dict[int, set[int]] = {}
+            for score, i, j in edges:
+                root = find(i)
+                best[root] = max(best.get(root, 0.0), score)
+                members.setdefault(root, set()).update((i, j))
+            groups = [{"score": best[r], "members": sorted(members[r])} for r in members if len(members[r]) >= 2]
+            groups.sort(key=lambda g: g["score"], reverse=True)
+            groups = groups[:max_groups]
+
+            wanted_ids = {ids[p] for g in groups for p in g["members"]}
+            text_map: dict[int, str] = {}
+            wanted_list = list(wanted_ids)
+            for start in range(0, len(wanted_list), _MAX_PLACEHOLDERS):
+                batch = wanted_list[start:start + _MAX_PLACEHOLDERS]
+                ph = ",".join("?" * len(batch))
+                rows = self.conn.execute(
+                    f"SELECT id, chunk FROM rag_chunks WHERE id IN ({ph})", batch
+                ).fetchall()
+                for rid, chunk in rows:
+                    text_map[int(rid)] = str(chunk)
+            out: list[dict] = []
+            for g in groups:
+                member_rows = []
+                for pos in g["members"]:
+                    rid = ids[pos]
+                    source, l = meta.get(rid, ("", ""))
+                    snippet = " ".join(text_map.get(rid, "").split())[:140]
+                    member_rows.append({"id": rid, "source": source, "lib": l, "snippet": snippet})
+                out.append({"score": g["score"], "members": member_rows})
+            return out

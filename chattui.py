@@ -42,6 +42,7 @@ Comandos (digitados na caixa de entrada):
     /rag_lib criar <lib>  cria (e ativa) uma biblioteca vazia
     /rag_lib ver <lib>    mostra os arquivos indexados na biblioteca
     /rag_stats            mostra quantos trechos/fontes estão indexados
+    /rag dupes            acha trechos quase duplicados (semântico)
     /notes                lista as últimas notas .md salvas por ferramentas
     /plugins              lista os plugins carregados
 """
@@ -154,6 +155,10 @@ I18N: dict[str, dict[str, str]] = {
         "trilium_env": "[erro] TRILIUM_URL e/ou TRILIUM_TOKEN não configurados (veja env.example).",
         "trilium_ok": "✓ Conversa enviada pro Trilium — nota do dia '{titulo}' ({id}).",
         "trilium_root_env": "[erro] TRILIUM_JOURNAL_ROOT não configurado — defina no .env o id da nota raiz do seu Journal.",
+        "dupes_usage": "Uso: `/rag dupes [--lib <nome>] [--limiar 0.92] [--max 10]`",
+        "dupes_none": "Nenhum trecho quase duplicado acima do limiar {limiar}.",
+        "dupes_header": "Trechos quase duplicados — {n} grupo(s) encontrado(s):",
+        "dupes_group": "**score {score}** · {n} trecho(s):",
         "mem_saved": "✓ Memória salva: _{text}_",
         "mem_none": "Nenhuma memória salva ainda.",
         "mem_forgot": "✓ Memória {id} apagada.",
@@ -226,6 +231,7 @@ I18N: dict[str, dict[str, str]] = {
         "p_rag_lib_use": "/rag_lib usar — filtrar busca por lib",
         "p_rag_lib_create": "/rag_lib criar — nova biblioteca",
         "p_rag_lib_ver": "/rag_lib ver — fontes de uma lib",
+        "p_rag_dupes": "/rag dupes — achar trechos quase duplicados",
         "p_rename": "/rename — renomear conversa",
         "p_notes": "/notes — listar notas",
         "p_plugins": "/plugins — listar plugins",
@@ -283,6 +289,10 @@ I18N: dict[str, dict[str, str]] = {
         "trilium_env": "[error] TRILIUM_URL and/or TRILIUM_TOKEN not set (see env.example).",
         "trilium_ok": "✓ Conversation sent to Trilium — daily note '{titulo}' ({id}).",
         "trilium_root_env": "[error] TRILIUM_JOURNAL_ROOT not set — define it in .env with the id of your Journal root note.",
+        "dupes_usage": "Usage: `/rag dupes [--lib <name>] [--limiar 0.92] [--max 10]`",
+        "dupes_none": "No near-duplicate chunks above threshold {limiar}.",
+        "dupes_header": "Near-duplicate chunks — {n} group(s) found:",
+        "dupes_group": "**score {score}** · {n} chunk(s):",
         "mem_saved": "✓ Memory saved: _{text}_",
         "mem_none": "No memories saved yet.",
         "mem_forgot": "✓ Memory {id} deleted.",
@@ -355,6 +365,7 @@ I18N: dict[str, dict[str, str]] = {
         "p_rag_lib_use": "/rag_lib usar — filter search by library",
         "p_rag_lib_create": "/rag_lib criar — new library",
         "p_rag_lib_ver": "/rag_lib ver — sources of a library",
+        "p_rag_dupes": "/rag dupes — find near-duplicate chunks",
         "p_rename": "/rename — rename conversation",
         "p_notes": "/notes — list notes",
         "p_plugins": "/plugins — list plugins",
@@ -667,6 +678,7 @@ class ChatCommandsProvider(Provider):
             (tr("p_rag_lib_use"), lambda: app.fill_input("/rag_lib usar "), cmd_help),
             (tr("p_rag_lib_create"), lambda: app.fill_input("/rag_lib criar "), cmd_help),
             (tr("p_rag_lib_ver"), lambda: app.fill_input("/rag_lib ver "), cmd_help),
+            (tr("p_rag_dupes"), lambda: app.fill_input("/rag dupes "), cmd_help),
             (tr("p_rename"), lambda: app.fill_input("/rename "), cmd_help),
             (tr("p_md"), lambda: app.fill_input("/export md "), cmd_help),
             (tr("p_trilium"), lambda: app.fill_input("/export trilium"), cmd_help),
@@ -1170,7 +1182,9 @@ class ChatTUI(App):
                 self._append_bubble("error", self.tr("lang_usage"))
 
         elif cmd == "/rag":
-            if arg == "on":
+            if arg.startswith("dupes"):
+                await self._handle_rag_dupes(arg[len("dupes"):].strip())
+            elif arg == "on":
                 if self.rag is None:
                     self._append_bubble("error", self.tr("rag_not_cfg"))
                     return
@@ -1355,6 +1369,52 @@ class ChatTUI(App):
 
         else:
             self._append_bubble("error", self.tr("unknown_cmd", cmd=cmd))
+
+    async def _handle_rag_dupes(self, flags: str) -> None:
+        if self.rag is None:
+            self._append_bubble("error", self.tr("rag_not_cfg"))
+            return
+        lib: str | None = None
+        limiar = 0.92
+        maxn = 10
+        tokens = flags.split()
+        i = 0
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok in ("--lib", "--limiar", "--max") and i + 1 < len(tokens):
+                value = tokens[i + 1]
+                i += 2
+                if tok == "--lib":
+                    lib = value
+                elif tok == "--limiar":
+                    try:
+                        limiar = float(value)
+                    except ValueError:
+                        pass
+                else:
+                    try:
+                        maxn = int(value)
+                    except ValueError:
+                        pass
+            else:
+                i += 1
+        widget = self._append_bubble("assistant", "…")
+        try:
+            groups = await self.rag.dupes(lib=lib, limiar=limiar, max_groups=maxn)
+        except Exception as exc:  # noqa: BLE001
+            self._safe_update(widget, self.tr("index_error", exc=exc))
+            return
+        if not groups:
+            self._safe_update(widget, self.tr("dupes_none", limiar=f"{limiar:g}"))
+            return
+        lines = [self.tr("dupes_header", n=len(groups)), ""]
+        for group in groups:
+            lines.append(self.tr("dupes_group", score=f"{group['score']:.3f}", n=len(group["members"])))
+            for member in group["members"]:
+                snippet = member["snippet"] or "(sem texto)"
+                lines.append(f"- `{member['source']}` · lib `{member['lib']}` — “{snippet}”")
+            lines.append("")
+        self._safe_update(widget, "\n".join(lines))
 
     # ------------------------------------------------------------ chat
 

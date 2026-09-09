@@ -64,6 +64,7 @@ acompanhar quando você descer (ou com Ctrl+J).
 | `/rag_lib criar <lib>` | cria (e ativa) uma biblioteca vazia |
 | `/rag_lib ver <lib>` | lista os arquivos indexados na biblioteca |
 | `/rag_stats` | mostra quantos trechos/fontes estão indexados |
+| `/rag dupes` | acha trechos quase duplicados **semanticamente** (doc×doc, sem re-embed) |
 | `/notes` | lista as últimas notas .md salvas por ferramentas |
 | `/rename <título>` | renomeia a conversa atual |
 | `/export md [caminho]` | salva a conversa em `.md` (padrão: `data/exports/`; caminho custom opcional) |
@@ -224,6 +225,20 @@ mesma fonte em outra lib é permitido (a mesma base em duas coleções).
 
 Duplicatas da mesma fonte na mesma lib não são re-indexadas (hash SHA-1
 por trecho): repetir `/rag_add` no mesmo arquivo não polui a base.
+
+Além do hash (texto exato), o **`/rag dupes`** compara os vetores já
+armazenados (doc×doc, sem re-embed) e agrupa trechos de **fontes
+diferentes** que dizem a mesma coisa com outras palavras:
+
+```
+/rag dupes                       # todas as libs, limiar 0.92
+/rag dupes --lib projeto-x       # só numa lib
+/rag dupes --limiar 0.95 --max 5 # mais rígido, top 5 grupos
+```
+
+Pares da mesma fonte (ex.: o mesmo arquivo espelhado em duas libs) são
+ignorados — o objetivo é achar duplicatas entre arquivos distintos pra
+você remover a fonte redundante (a remoção em si ainda é manual).
 
 Se algo der errado com os arquivos (ou você trocar de modelo de
 embeddings), apague os três `rag.db.{matrix.npy,ids.npy,meta.json}` — a

@@ -66,6 +66,7 @@ back down (or with Ctrl+J).
 | `/rag_lib criar <lib>` | creates (and activates) an empty library |
 | `/rag_lib ver <lib>` | lists the files indexed in a library |
 | `/rag_stats` | shows how many chunks/sources are indexed |
+| `/rag dupes` | finds **semantically** near-duplicate chunks (doc×doc, no re-embedding) |
 | `/notes` | lists the latest `.md` notes saved by tools |
 | `/rename <title>` | renames the current conversation |
 | `/export md [path]` | saves the conversation as `.md` (default: `data/exports/`; optional custom path) |
@@ -225,6 +226,21 @@ same base in two collections).
 Duplicates from the same source in the same library are not re-indexed
 (SHA-1 hash per chunk): repeating `/rag_add` on the same file doesn't
 pollute the base.
+
+Beyond the hash (exact text), **`/rag dupes`** compares the stored
+vectors (doc×doc, no re-embedding) and groups chunks from **different
+sources** that say the same thing in other words:
+
+```
+/rag dupes                       # all libraries, threshold 0.92
+/rag dupes --lib project-x       # within one library
+/rag dupes --limiar 0.95 --max 5 # stricter, top 5 groups
+```
+
+Pairs from the same source (e.g. the same file mirrored into two
+libraries) are ignored — the goal is finding duplicates across distinct
+files so you can remove the redundant source (removal itself is still
+manual).
 
 If anything goes wrong with the files (or you change embedding models),
 delete the three `rag.db.{matrix.npy,ids.npy,meta.json}` — the next search
