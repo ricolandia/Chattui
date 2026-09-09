@@ -1,0 +1,71 @@
+# Copie este arquivo para config/config.toml (na subpasta config/) e ajuste.
+# O app procura em config/config.toml por padrão (ou onde CHATTUI_CONFIG apontar).
+
+# --- Geral --------------------------------------------------------------
+[geral]
+# Idioma da interface: "pt" (padrão) ou "en". Dá pra trocar em runtime
+# com /idioma pt|en (ou /language) — o config define o padrão do início.
+lang = "pt"
+#
+# Cada bloco [[models]] é um endpoint/modelo que aparece no seletor (Ctrl+M).
+# api_key_env é o NOME da variável de ambiente que guarda a chave — a chave
+# em si nunca vai pro arquivo de config.
+#
+# Campos opcionais por modelo:
+#   system_prompt     — instrução fixa de comportamento (vira a 1ª system message;
+#                       funciona em qualquer endpoint, onde não existe Modelfile)
+#   max_history_chars — orçamento do histórico da conversa em caracteres: as
+#                       mensagens mais antigas são cortadas antes do envio (a
+#                       última pergunta nunca é cortada). Útil em modelos locais
+#                       com contexto pequeno — sys/memória/RAG não contam aqui.
+#   temperature, top_p, seed, max_tokens, frequency_penalty,
+#   presence_penalty, stop — parâmetros de sampling (campos OpenAI padrão,
+#                       aceitos por Ollama/OpenAI/OpenRouter/LocalAI). Só os
+#                       setados entram no payload.
+#
+# ⚠️ num_ctx / repeat_penalty NÃO existem na API compatível com OpenAI (o
+# Ollama ignora silenciosamente). Pra controlar o contexto de um modelo do
+# Ollama, crie uma variante com Modelfile e aponte o model_id pra ela:
+#   FROM llama3.2
+#   PARAMETER num_ctx 8192
+#   # ollama create meumodelo-ctx8k
+# Nesse caso model_id = "meumodelo-ctx8k".
+
+[[models]]
+name = "local-ollama"
+api_base = "http://127.0.0.1:11434/v1"
+model_id = "llama3"
+api_key_env = ""
+default = true
+# Exemplos de uso (descomente e ajuste):
+# system_prompt = "Responda em português. Se não souber, diga que não sabe — não invente."
+# max_history_chars = 12000
+# temperature = 0.7
+# max_tokens = 1024
+
+[[models]]
+name = "meu-servidor-vps"
+api_base = "https://sua-vps.exemplo.com/v1"
+model_id = "gpt-4o-mini"
+api_key_env = "CHATTUI_VPS_KEY"
+
+[[models]]
+name = "openai"
+api_base = "https://api.openai.com/v1"
+model_id = "gpt-4o-mini"
+api_key_env = "OPENAI_API_KEY"
+
+[[models]]
+name = "openrouter-deepseek-v4-flash"
+api_base = "https://openrouter.ai/api/v1"
+model_id = "deepseek/deepseek-v4-flash"   # aponta pra última revisão da família V4 Flash
+api_key_env = "OPENROUTER_API_KEY"
+
+# --- RAG (opcional) -----------------------------------------------------
+# Remova ou comente esta seção inteira se não quiser usar RAG.
+# Requer: ollama pull nomic-embed-text
+[rag]
+api_base = "http://127.0.0.1:11434/v1"
+embedding_model = "nomic-embed-text"
+api_key_env = ""
+top_k = 4

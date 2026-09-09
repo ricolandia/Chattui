@@ -1,0 +1,22 @@
+# Dados gerados em runtime (banco de conversas, memória, RAG, notas, exports)
+data/
+
+# Config local com seus endpoints (o exemplo é versionado)
+config/config.toml
+
+# Chaves de API — nunca versionar
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Registro interno de sessão (decisões/caminhos pessoais) — não vai pro GitHub
+SESSION.md
+
+# Lixo de SO/editor
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/

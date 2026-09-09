@@ -1,0 +1,7 @@
+# Só necessário se quiser usar o RAG (/rag_add, notas indexadas) ou indexar
+# PDF/DOCX. Hoje /rag_add só lê .txt/.md direto; PDF/DOCX exigem um loader
+# extra em rag.py::add_file (ver README).
+# Uso: pip install -r requirements-rag-opcional.txt --break-system-packages
+numpy>=1.26
+pypdf>=4.3.0
+python-docx>=1.1.0

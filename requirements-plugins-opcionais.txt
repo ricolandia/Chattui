@@ -1,0 +1,15 @@
+# Dependências dos plugins de exemplo em plugins_examples/ — instale só o
+# que for usar. Nenhuma delas é necessária pro chattui em si.
+#
+# Uso: pip install -r requirements-plugins-opcionais.txt --break-system-packages
+
+youtube-transcript-api>=1.0.0   # plugin youtube_transcript.py
+sumy>=0.12.0                     # plugin summarize_text.py
+yake>=0.7.0                      # plugin extract_keywords.py
+ddgs>=9.0.0                      # plugin web_search.py
+
+# sumy precisa dos dados de tokenização do NLTK (uma vez só):
+#   python3 -c "import nltk; nltk.download('punkt_tab')"
+requests>=2.32.0                 # plugin fetch_page.py
+beautifulsoup4>=4.12.0           # plugin fetch_page.py
+lxml>=5.3.0                      # plugin fetch_page.py

@@ -1,0 +1,4 @@
+# Núcleo do chattui — nada aqui é usado só por um plugin específico.
+textual>=0.60
+httpx>=0.27
+# numpy (RAG) ficou em requirements-rag-opcional.txt — chat puro não precisa.
