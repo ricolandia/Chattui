@@ -124,6 +124,23 @@ system message on every call — hence the character budget
 entries before running out of room. Without that cap, memory would recreate
 exactly the token-burn problem that motivated this project.
 
+## Semantic memory (upsert)
+
+With an embeddings endpoint configured (an `[embeddings]` section — or the
+`[rag]` one, if present), `/remember` compares the new fact against the
+stored ones and, if **similar** (cosine ≥ 0.90), **updates** the entry
+instead of duplicating. Older facts without an embedding get one on first
+use (automatic backfill).
+
+```
+/remember likes drip coffee        # saves
+/remember prefers drip coffee      # ~updates the same entry
+```
+
+Without an embeddings endpoint, `/remember` keeps the simple
+append behavior. If embedding fails, the fact is still saved and the chat
+warns about it.
+
 ## Per-model parameters and instructions
 
 Each `[[models]]` block in `config.toml` accepts optional fields:
@@ -131,6 +148,7 @@ Each `[[models]]` block in `config.toml` accepts optional fields:
 | Field | What it does |
 |---|---|
 | `system_prompt` | fixed behavior instruction — becomes the 1st system message of every call to that model. Works on **any** endpoint (on Ollama the equivalent is embedding it in a Modelfile; here it also applies to OpenAI/OpenRouter) |
+| `max_tool_hops` | tool round-trip limit per message (default 4) |
 | `max_history_chars` | conversation history budget (characters). Older messages are trimmed before sending; the last question is never cut. `system_prompt`, memory and RAG do **not** count toward the budget |
 | `temperature`, `top_p`, `seed`, `max_tokens` | standard OpenAI sampling |
 | `frequency_penalty`, `presence_penalty`, `stop` | also standard OpenAI |

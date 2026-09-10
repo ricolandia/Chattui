@@ -30,7 +30,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-import httpx
+from embeddings import Embedder
 
 _MAX_PLACEHOLDERS = 900  # limite conservador de variáveis SQLite numa query
 
@@ -86,6 +86,7 @@ class RagStore:
         self.api_base = api_base.rstrip("/")
         self.embedding_model = embedding_model
         self.api_key = api_key
+        self._embedder = Embedder(self.api_base, embedding_model, api_key)
         self._lock = asyncio.Lock()
         stem = db_path.name  # ex.: "rag.db"
         self._matrix_file = db_path.with_name(stem + ".matrix.npy")
@@ -245,18 +246,7 @@ class RagStore:
     # ----------------------------------------------------- embeddings
 
     async def _embed(self, texts: list[str]) -> list[list[float]]:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(
-                f"{self.api_base}/embeddings",
-                json={"model": self.embedding_model, "input": texts},
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return [d["embedding"] for d in data["data"]]
+        return await self._embedder.embed(texts)
 
     # --------------------------------------------------------- adição
 

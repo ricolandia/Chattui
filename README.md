@@ -124,6 +124,22 @@ entradas mais antigas antes de faltar espaço. Sem esse teto, a memória
 recriaria exatamente o problema de consumo de tokens que motivou este
 projeto.
 
+## Memória semântica (upsert)
+
+Com um endpoint de embeddings configurado (seção `[embeddings]` — ou o
+próprio `[rag]`, se existir), o `/remember` compara o fato novo com os já
+salvos e, se for **parecido** (cosseno ≥ 0.90), **atualiza** a entrada em
+vez de duplicar. Fatos antigos sem embedding ganham um na primeira vez
+(backfill automático).
+
+```
+/remember gosta de café coado          # salva
+/remember prefere café coado           # ~atualiza a mesma entrada
+```
+
+Sem endpoint de embeddings, o `/remember` mantém o comportamento simples
+(empilha). Se o embedding falhar, o fato é salvo mesmo assim e o chat avisa.
+
 ## Parâmetros e instrução por modelo
 
 Cada `[[models]]` no `config.toml` aceita campos opcionais:
@@ -131,6 +147,7 @@ Cada `[[models]]` no `config.toml` aceita campos opcionais:
 | Campo | O que faz |
 |---|---|
 | `system_prompt` | instrução fixa de comportamento — vira a 1ª system message de toda chamada deste modelo. Funciona em **qualquer** endpoint (no Ollama o equivalente é embutir no Modelfile; aqui vale também pra OpenAI/OpenRouter) |
+| `max_tool_hops` | limite de idas-e-voltas de ferramentas por mensagem (default 4) |
 | `max_history_chars` | orçamento do histórico da conversa (caracteres). Mensagens antigas são cortadas antes do envio; a última pergunta nunca é cortada. `system_prompt`, memória e RAG **não** contam no orçamento |
 | `temperature`, `top_p`, `seed`, `max_tokens` | sampling padrão OpenAI |
 | `frequency_penalty`, `presence_penalty`, `stop` | também padrão OpenAI |

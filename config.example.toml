@@ -14,6 +14,8 @@ lang = "pt"
 # Campos opcionais por modelo:
 #   system_prompt     — instrução fixa de comportamento (vira a 1ª system message;
 #                       funciona em qualquer endpoint, onde não existe Modelfile)
+#   max_tool_hops     — limite de idas-e-voltas de ferramentas por mensagem
+#                       (default 4; aumente em modelo bom, reduza em pequeno)
 #   max_history_chars — orçamento do histórico da conversa em caracteres: as
 #                       mensagens mais antigas são cortadas antes do envio (a
 #                       última pergunta nunca é cortada). Útil em modelos locais
@@ -40,6 +42,7 @@ default = true
 # Exemplos de uso (descomente e ajuste):
 # system_prompt = "Responda em português. Se não souber, diga que não sabe — não invente."
 # max_history_chars = 12000
+# max_tool_hops = 6
 # temperature = 0.7
 # max_tokens = 1024
 
@@ -60,6 +63,16 @@ name = "openrouter-deepseek-v4-flash"
 api_base = "https://openrouter.ai/api/v1"
 model_id = "deepseek/deepseek-v4-flash"   # aponta pra última revisão da família V4 Flash
 api_key_env = "OPENROUTER_API_KEY"
+
+# --- Embeddings (opcional) ----------------------------------------------
+# Usado pela memória semântica (/remember faz upsert em vez de duplicar) e,
+# se o RAG estiver configurado abaixo, os dois compartilham este endpoint.
+# Sem esta seção, a memória cai no [rag] se ele existir; sem nenhum dos
+# dois, /remember volta a só empilhar (sem dedup).
+[embeddings]
+api_base = "http://127.0.0.1:11434/v1"
+embedding_model = "nomic-embed-text"
+api_key_env = ""
 
 # --- RAG (opcional) -----------------------------------------------------
 # Remova ou comente esta seção inteira se não quiser usar RAG.

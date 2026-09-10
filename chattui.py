@@ -71,6 +71,7 @@ from textual.screen import ModalScreen
 from textual.system_commands import SystemCommandsProvider
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Markdown, Static
 
+from embeddings import Embedder
 from memory import MemoryStore
 from notes import _slugify, is_indexable, save_tool_result
 from plugins import PluginManager
@@ -160,6 +161,8 @@ I18N: dict[str, dict[str, str]] = {
         "dupes_header": "Trechos quase duplicados — {n} grupo(s) encontrado(s):",
         "dupes_group": "**score {score}** · {n} trecho(s):",
         "mem_saved": "✓ Memória salva: _{text}_",
+        "mem_updated": "✓ Memória atualizada (antes: _{old}_): _{text}_",
+        "mem_embed_fail": "⚠ Embedding falhou ({exc}) — salvei sem dedup: _{text}_",
         "mem_none": "Nenhuma memória salva ainda.",
         "mem_forgot": "✓ Memória {id} apagada.",
         "mem_usage": "Uso: `/remember <texto>`",
@@ -205,6 +208,8 @@ I18N: dict[str, dict[str, str]] = {
         "st_streaming": "streamando…",
         "st_cancelling": "cancelando…",
         "tool_using": "_usando ferramenta: {names}…_",
+        "plan_header": "**Plano de ferramentas**",
+        "plan_exhausted": "limite de {n} hops atingido — respondendo com o que tenho.",
         "interrupted": "\n\n_⏹ interrompido._",
         "ctx_error": "**Erro ao montar contexto (RAG/memória):** {exc}",
         "stream_error": "\n\n**Erro:** {exc}{suffix}",
@@ -294,6 +299,8 @@ I18N: dict[str, dict[str, str]] = {
         "dupes_header": "Near-duplicate chunks — {n} group(s) found:",
         "dupes_group": "**score {score}** · {n} chunk(s):",
         "mem_saved": "✓ Memory saved: _{text}_",
+        "mem_updated": "✓ Memory updated (was: _{old}_): _{text}_",
+        "mem_embed_fail": "⚠ Embedding failed ({exc}) — saved without dedup: _{text}_",
         "mem_none": "No memories saved yet.",
         "mem_forgot": "✓ Memory {id} deleted.",
         "mem_usage": "Usage: `/remember <text>`",
@@ -339,6 +346,8 @@ I18N: dict[str, dict[str, str]] = {
         "st_streaming": "streaming…",
         "st_cancelling": "cancelling…",
         "tool_using": "_using tool: {names}…_",
+        "plan_header": "**Tool plan**",
+        "plan_exhausted": "reached the {n}-hop limit — answering with what I have.",
         "interrupted": "\n\n_⏹ interrupted._",
         "ctx_error": "**Error building context (RAG/memory):** {exc}",
         "stream_error": "\n\n**Error:** {exc}{suffix}",
@@ -452,6 +461,8 @@ class ModelConfig:
     # Orçamento de histórico da conversa (em caracteres): corta as
     # mensagens mais antigas antes de montar o payload, nunca a última.
     max_history_chars: int | None = None
+    # Limite de idas-e-voltas de ferramentas por mensagem (default global).
+    max_tool_hops: int | None = None
     # Parâmetros de sampling — campos OpenAI padrão (todos opcionais;
     # só os setados entram no payload).
     temperature: float | None = None
@@ -514,6 +525,20 @@ def load_models(raw: dict) -> list[ModelConfig]:
         raise SystemExit("Nenhum [[models]] definido no config.toml.")
     models.sort(key=lambda m: not m.default)  # default primeiro
     return models
+
+
+def load_embedder(raw: dict) -> Embedder | None:
+    """Embedder compartilhado (memória semântica). Usa [embeddings] se
+    existir; senão cai no [rag]; sem nenhum dos dois, memória fica simples."""
+    r = raw.get("embeddings") or raw.get("rag")
+    if not r:
+        return None
+    api_base = r.get("api_base", "")
+    model = r.get("embedding_model") or r.get("model") or ""
+    if not api_base or not model:
+        return None
+    key_env = r.get("api_key_env", "")
+    return Embedder(api_base, model, os.environ.get(key_env) if key_env else None)
 
 
 def load_rag_config(raw: dict) -> RagConfig | None:
@@ -724,12 +749,13 @@ class ChatTUI(App):
         raw = _load_raw_config()
         self.models = load_models(raw)
         self.rag_config = load_rag_config(raw)
+        self.embedder = load_embedder(raw)
         self.model_idx = 0
         geral = raw.get("geral") or {}
         self._lang = geral.get("lang", "pt") if geral.get("lang") in ("pt", "en") else "pt"
 
         self.history = History(DATA_DIR / "history.db")
-        self.memory = MemoryStore(DATA_DIR / "memory.db")
+        self.memory = MemoryStore(DATA_DIR / "memory.db", embedder=self.embedder)
         self.plugins = PluginManager(PLUGINS_DIR)
 
         self.rag: RagStore | None = None
@@ -877,6 +903,24 @@ class ChatTUI(App):
             widget.update(content)
         except Exception:  # noqa: BLE001 — widget desmontado, só ignora
             pass
+
+    def _plan_line(self, n: int, tool: str, args: dict, result: str) -> str:
+        """Linha do 'plano de ferramentas' exibido no bubble."""
+        try:
+            args_txt = json.dumps(args, ensure_ascii=False)
+        except Exception:  # noqa: BLE001
+            args_txt = str(args)
+        if len(args_txt) > 60:
+            args_txt = args_txt[:57] + "…"
+        if result.startswith("[erro"):
+            outcome = "✗ " + " ".join(result.split())[:60]
+        else:
+            size = len(result)
+            outcome = f"{size / 1024:.1f} KB" if size >= 1024 else f"{size} B"
+        return f"{n}. `{tool}` {args_txt} → {outcome}"
+
+    def _render_plan(self, lines: list[str]) -> str:
+        return self.tr("plan_header") + "\n" + "\n".join(f"- {line}" for line in lines)
 
     # ------------------------------------------- status bar / autoscroll
 
@@ -1147,6 +1191,18 @@ class ChatTUI(App):
             if not arg:
                 self._append_bubble("error", self.tr("mem_usage"))
                 return
+            if self.memory.embedder is not None:
+                try:
+                    _mid, action, old = await self.memory.add_semantic(arg)
+                    if action == "updated":
+                        self._append_bubble("assistant", self.tr("mem_updated", old=old or "", text=arg))
+                    else:
+                        self._append_bubble("assistant", self.tr("mem_saved", text=arg))
+                    return
+                except Exception as exc:  # noqa: BLE001 — sem dedup, mas salva
+                    self.memory.add(arg)
+                    self._append_bubble("assistant", self.tr("mem_embed_fail", exc=exc, text=arg))
+                    return
             self.memory.add(arg)
             self._append_bubble("assistant", self.tr("mem_saved", text=arg))
 
@@ -1498,7 +1554,7 @@ class ChatTUI(App):
             resp.raise_for_status()
             return resp.json()
 
-    async def _stream_into_widget(self, messages: list[dict], widget: Markdown) -> str | None:
+    async def _stream_into_widget(self, messages: list[dict], widget: Markdown, prefix: str = "") -> str | None:
         model = self.current_model
         url = model.api_base.rstrip("/") + "/chat/completions"
         headers = {"Content-Type": "application/json"}
@@ -1530,18 +1586,18 @@ class ChatTUI(App):
                             full_text += delta
                             chunk_count += 1
                             if chunk_count % STREAM_REDRAW_EVERY == 0:
-                                self._safe_update(widget, full_text)
+                                self._safe_update(widget, prefix + full_text)
                                 self._scroll_if_stick()
         except asyncio.CancelledError:
             # cancelado com Esc — deixa o parcial visível; quem interrompeu avisa
             raise
         except Exception as exc:  # noqa: BLE001
             suffix = self._key_debug() if "401" in str(exc) or "403" in str(exc) else ""
-            self._safe_update(widget, (full_text or "") + self.tr("stream_error", exc=exc, suffix=suffix))
+            self._safe_update(widget, prefix + (full_text or "") + self.tr("stream_error", exc=exc, suffix=suffix))
             self._scroll_if_stick()
             return None
 
-        self._safe_update(widget, full_text)
+        self._safe_update(widget, prefix + full_text)
         self._scroll_if_stick()
         return full_text
 
@@ -1570,27 +1626,33 @@ class ChatTUI(App):
                 return
 
             tools = self.plugins.get_tool_schemas()
+            hops_limit = self.current_model.max_tool_hops or MAX_TOOL_HOPS
+            plan_lines: list[str] = []
+            ended_with_tools = False
             if tools:
                 try:
                     hops = 0
-                    while hops < MAX_TOOL_HOPS:
+                    while hops < hops_limit:
                         hops += 1
-                        self._stage = self.tr("st_thinking_hop", hop=hops, max=MAX_TOOL_HOPS)
+                        self._stage = self.tr("st_thinking_hop", hop=hops, max=hops_limit)
                         resp = await self._call_api(payload_messages, tools=tools)
                         choice = resp["choices"][0]["message"]
                         tool_calls = choice.get("tool_calls")
                         if not tool_calls:
+                            ended_with_tools = False
                             break
+                        ended_with_tools = True
                         payload_messages.append(choice)
                         names = ", ".join(tc["function"]["name"] for tc in tool_calls)
-                        self._stage = self.tr("st_tool", names=names, hop=hops, max=MAX_TOOL_HOPS)
-                        self._safe_update(widget, self.tr("tool_using", names=names))
+                        self._stage = self.tr("st_tool", names=names, hop=hops, max=hops_limit)
                         for tc in tool_calls:
                             try:
                                 args = json.loads(tc["function"]["arguments"] or "{}")
                             except json.JSONDecodeError:
                                 args = {}
                             result = await self.plugins.run_tool(tc["function"]["name"], args)
+                            plan_lines.append(self._plan_line(len(plan_lines) + 1, tc["function"]["name"], args, result))
+                            self._safe_update(widget, self._render_plan(plan_lines))
                             await self._save_and_index_note(tc["function"]["name"], args, result)
                             payload_messages.append(
                                 {"role": "tool", "tool_call_id": tc["id"], "content": result}
@@ -1603,8 +1665,13 @@ class ChatTUI(App):
                         timeout=6,
                     )
 
+            prefix = ""
+            if plan_lines:
+                if ended_with_tools and hops >= hops_limit:
+                    plan_lines.append(self.tr("plan_exhausted", n=hops_limit))
+                prefix = self._render_plan(plan_lines) + "\n\n---\n\n"
             self._stage = self.tr("st_streaming")
-            full_text = await self._stream_into_widget(payload_messages, widget)
+            full_text = await self._stream_into_widget(payload_messages, widget, prefix=prefix)
             if full_text is not None:
                 messages.append({"role": "assistant", "content": full_text})
                 try:
