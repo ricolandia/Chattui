@@ -64,6 +64,17 @@ api_base = "https://openrouter.ai/api/v1"
 model_id = "deepseek/deepseek-v4-flash"   # aponta pra última revisão da família V4 Flash
 api_key_env = "OPENROUTER_API_KEY"
 
+# --- Segurança (opcional) ------------------------------------------------
+# Bloqueia acesso à rede local/loopback no fetch_page (anti-SSRF).
+# Ligue só se quiser que o modelo leia seus próprios serviços locais.
+[seguranca]
+permitir_rede_local = false
+# Ferramentas que GRAVAM (Trilium, agenda) pedem confirmação no chat antes
+# de executar (proteção contra prompt-injection via conteúdo de páginas).
+confirmar_destrutivos = true
+# Ferramentas dispensadas do modal (pula a confirmação):
+# auto_confirmar = ["agendar_evento"]
+
 # --- Embeddings (opcional) ----------------------------------------------
 # Usado pela memória semântica (/remember faz upsert em vez de duplicar) e,
 # se o RAG estiver configurado abaixo, os dois compartilham este endpoint.

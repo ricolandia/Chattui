@@ -55,9 +55,18 @@ class PluginManager:
                 if schema is None or run_fn is None:
                     self.load_errors.append(f"{py_file.name}: falta TOOL_SCHEMA ou run()")
                     continue
-                self.plugins[schema["name"]] = {"schema": schema, "run": run_fn, "file": py_file.name}
+                self.plugins[schema["name"]] = {
+                    "schema": schema,
+                    "run": run_fn,
+                    "file": py_file.name,
+                    "destructive": bool(getattr(module, "DESTRUCTIVE", False)),
+                }
             except Exception as exc:  # noqa: BLE001 — plugin de terceiro, qualquer erro vira aviso
                 self.load_errors.append(f"{py_file.name}: {exc}")
+
+    def is_destructive(self, name: str) -> bool:
+        plugin = self.plugins.get(name)
+        return bool(plugin and plugin.get("destructive"))
 
     def get_tool_schemas(self) -> list[dict]:
         return [{"type": "function", "function": p["schema"]} for p in self.plugins.values()]

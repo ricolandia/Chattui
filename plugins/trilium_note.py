@@ -5,6 +5,9 @@ com "_". Requer: pip install requests
 
 import os
 
+# Ferramenta que GRAVA no Trilium — o chattui pede confirmação antes.
+DESTRUCTIVE = True
+
 # mesma nota mãe fixa do trilium_post.py; sobrescreva via TRILIUM_PARENT_ID
 PARENT_NOTE_ID = os.environ.get("TRILIUM_PARENT_ID", "Your_note_ID")
 

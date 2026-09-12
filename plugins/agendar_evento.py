@@ -11,6 +11,9 @@ próprio agendar.py).
 
 from __future__ import annotations
 
+# Ferramenta que GRAVA na agenda (CalDAV) — o chattui pede confirmação antes.
+DESTRUCTIVE = True
+
 import datetime
 import os
 import subprocess

@@ -37,6 +37,28 @@ TOOL_SCHEMA = {
 _PLAIN_EXTS = {".txt", ".md", ".csv", ".log", ".json", ".py", ".toml", ".html", ".xml"}
 
 
+_BLOCKED_DIRS = {".ssh", ".gnupg", ".aws", ".kube", ".docker", "credentials", "secrets"}
+_BLOCKED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".kdbx")
+_BLOCKED_NAME_PATTERNS = ("id_", ".env", "token", "secret", "credential", "senha", "password")
+
+
+def _caminho_sensivel(path: Path) -> str | None:
+    """Deny-list de caminhos sensíveis (evita exfiltração de segredos)."""
+    parts = path.parts
+    for part in parts[:-1]:
+        if part.startswith(".") or part.lower() in _BLOCKED_DIRS:
+            return f"diretório oculto/sensível: {part!r}"
+    name = path.name.lower()
+    if name.startswith(".") :
+        return "arquivo oculto (dotfile)"
+    if name.endswith(_BLOCKED_SUFFIXES):
+        return "extensão típica de chave/certificado"
+    for pattern in _BLOCKED_NAME_PATTERNS:
+        if pattern in name:
+            return f"padrão sensível no nome: {pattern!r}"
+    return None
+
+
 def _extract(path: Path, budget: int) -> str:
     ext = path.suffix.lower()
     if ext in _PLAIN_EXTS:
@@ -87,6 +109,12 @@ def run(caminho: str, max_chars: int = MAX_CHARS) -> str:
     if not caminho or not caminho.strip():
         return "[erro] informe o caminho do arquivo."
     path = Path(caminho.strip()).expanduser()
+    bloqueio = _caminho_sensivel(path)
+    if bloqueio:
+        return (
+            f"[erro] caminho sensível bloqueado ({bloqueio}). "
+            "Deny-list do plugin — edite ler_arquivo_local.py se precisar ler esse arquivo."
+        )
     if not path.exists():
         return f"[erro] arquivo não encontrado: {path}"
     if path.is_dir():
