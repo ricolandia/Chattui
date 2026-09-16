@@ -128,6 +128,7 @@ I18N: dict[str, dict[str, str]] = {
         "cancel_done": "⏹ Geração interrompida.",
         "copy_none": "Nenhuma resposta do assistente nesta conversa pra copiar.",
         "copy_ok": "✓ Última resposta copiada ({n} caracteres).",
+        "copy_selection_ok": "✓ Copiado ({n} caracteres).",
         "copy_cache": "Sem clipboard de sistema — texto salvo em {path}",
         "copy_fail": "Sem clipboard de sistema — não consegui nem salvar em arquivo.",
         "model_switched": "Modelo: {name}",
@@ -272,6 +273,7 @@ I18N: dict[str, dict[str, str]] = {
         "cancel_done": "⏹ Generation interrupted.",
         "copy_none": "No assistant answer in this conversation to copy.",
         "copy_ok": "✓ Last answer copied ({n} characters).",
+        "copy_selection_ok": "✓ Copied ({n} characters).",
         "copy_cache": "No system clipboard — text saved to {path}",
         "copy_fail": "No system clipboard — couldn't even save to a file.",
         "model_switched": "Model: {name}",
@@ -1033,8 +1035,15 @@ class ChatTUI(App):
     def _copy_to_system_clipboard(self, text: str) -> bool:
         """Copia pra área de transferência do sistema. Retorna True se conseguiu.
 
-        Cadeia: xclip/xsel/wl-copy → janela Tk persistente (X11) → False."""
-        for prog in ("xclip", "xsel", "wl-copy"):
+        Ordem dos programas: em sessão Wayland o `wl-copy` vem primeiro —
+        `xclip`/`xsel` escrevem no clipboard do X11 e dependem da ponte do
+        XWayland pra chegar nos apps Wayland. Depois xclip/xsel; por fim a
+        janela Tk persistente (X11)."""
+        if os.environ.get("WAYLAND_DISPLAY"):
+            progs = ("wl-copy", "xclip", "xsel")
+        else:
+            progs = ("xclip", "xsel", "wl-copy")
+        for prog in progs:
             exe = shutil.which(prog)
             if not exe:
                 continue
@@ -1056,6 +1065,24 @@ class ChatTUI(App):
             return True
         except Exception:  # noqa: BLE001
             return False
+
+    def copy_to_clipboard(self, text: str) -> None:
+        """Copia pro clipboard do sistema — usado pelo Textual (seleção com o
+        mouse + Ctrl+C) e pelo Ctrl+Y daqui.
+
+        O Textual copia via OSC 52, que terminais baseados em **VTE** (Tilix,
+        gnome-terminal) ignoram **em silêncio**: a seleção não chega em lugar
+        nenhum e o app acha que deu certo. Aqui a cópia passa primeiro pela
+        cadeia local (wl-copy/xclip/Tk); o OSC 52 fica só como fallback, pros
+        terminais que implementam (kitty, ghostty, foot, wezterm...).
+        """
+        if not text:
+            return
+        if self._copy_to_system_clipboard(text):
+            self._clipboard = text  # estado interno do Textual (App.copy_to_clipboard)
+            self.notify(self.tr("copy_selection_ok", n=len(text)), timeout=2)
+            return
+        super().copy_to_clipboard(text)
 
     # ------------------------------------------------------------ actions
 
