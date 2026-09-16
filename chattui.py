@@ -508,6 +508,18 @@ class ModelConfig:
             out["stop"] = self.stop
         return out
 
+    def extra_headers(self, session_id: str | None = None) -> dict:
+        """Headers exigidos por alguns gateways. O OpenCode Go recusa a
+        requisição sem `x-opencode-session` (MissingSessionID) — o id da
+        conversa serve de sessão estável para roteamento/caching. O
+        User-Agent identifica o cliente, como o próprio doc do Go pede."""
+        if "opencode.ai/zen/go" in self.api_base:
+            return {
+                "User-Agent": "chattui/1.0",
+                "x-opencode-session": f"chattui-{session_id or 'novo'}",
+            }
+        return {}
+
 
 @dataclass
 class RagConfig:
@@ -1595,6 +1607,7 @@ class ChatTUI(App):
         headers = {"Content-Type": "application/json"}
         if model.api_key:
             headers["Authorization"] = f"Bearer {model.api_key}"
+        headers.update(model.extra_headers(str(self.current_conv_id)))
         payload = {"model": model.model_id, "messages": messages, "stream": False}
         payload.update(model.extra_payload())
         if tools:
@@ -1610,6 +1623,7 @@ class ChatTUI(App):
         headers = {"Content-Type": "application/json"}
         if model.api_key:
             headers["Authorization"] = f"Bearer {model.api_key}"
+        headers.update(model.extra_headers(str(self.current_conv_id)))
         payload = {"model": model.model_id, "messages": messages, "stream": True}
         payload.update(model.extra_payload())
 
