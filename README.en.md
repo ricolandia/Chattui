@@ -92,10 +92,14 @@ pre-fill the input box so you can complete the typing.
 path (`/export md ~/docs/chat.md` — the extension becomes `.md` on its own).
 
 `/export trilium` appends the conversation to **today's daily note** in your
-Trilium Journal (same convention as the `trilium_agenda_diaria.py` homelab
-script: note `DD - Weekday name` under the Journal root; creates it if
-missing). Requires `TRILIUM_URL` and `TRILIUM_TOKEN` in `.env`; the Journal
-root is configurable via `TRILIUM_JOURNAL_ROOT` (default: the homelab one).
+Trilium Journal. By default it uses the day notes API
+(`GET /etapi/calendar/days/<date>`), so it works with any Journal configured in
+Trilium — the note may live in a `calendarRoot` with a year/month structure and
+the title in whatever language you use (the server resolves it and creates the
+note if missing). If the server has no day notes configured, it falls back to
+the alternative mode: a `DD - Weekday name` (Portuguese) note under the Journal
+root. Requires `TRILIUM_URL` and `TRILIUM_TOKEN` in `.env`;
+`TRILIUM_JOURNAL_ROOT` is only needed in that fallback mode.
 
 ## API keys (.env)
 
