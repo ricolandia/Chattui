@@ -110,7 +110,7 @@ def run(query: str = "", note_id: str = "", top: int = 5) -> str:
             text = text[:MAX_CONTENT_CHARS] + f"\n\n[...conteúdo truncado em {MAX_CONTENT_CHARS} caracteres...]"
         return f"[nota {note_id}]\n{text}"
 
-    raw = _get("/etapi/search", params={"search": query.strip(), "limit": max(1, int(top or 5))})
+    raw = _get("/etapi/notes", params={"search": query.strip(), "limit": max(1, int(top or 5))})
     if raw.startswith("[erro"):
         return raw
     try:
