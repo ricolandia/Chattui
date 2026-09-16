@@ -89,11 +89,14 @@ caixa de entrada pra você completar a digitação.
 (autocontido); com argumento salva no caminho dado (`/export md ~/docs/chat.md`
 — a extensão vira `.md` sozinha).
 
-`/export trilium` anexa a conversa à **nota do dia** do seu Journal do Trilium
-(mesma convenção do `trilium_agenda_diaria.py` do homelab: nota `DD - Nome do
-dia` sob o root do Journal; cria se ainda não existe). Requer `TRILIUM_URL` e
-`TRILIUM_TOKEN` no `.env`; o root do Journal é configurável por
-`TRILIUM_JOURNAL_ROOT` (default: o mesmo do homelab).
+`/export trilium` anexa a conversa à **nota do dia** do seu Journal do Trilium.
+Por padrão usa a API de day notes (`GET /etapi/calendar/days/<data>`), então
+funciona com qualquer Journal configurado no Trilium — a nota pode estar num
+`calendarRoot` com estrutura ano/mês e o título no idioma que você usa (o
+servidor resolve tudo e cria a nota se faltar). Se o servidor não tiver day
+notes configuradas, cai no modo alternativo: nota `DD - Nome do dia` (em
+português) sob o root do Journal. Requer `TRILIUM_URL` e `TRILIUM_TOKEN` no
+`.env`; `TRILIUM_JOURNAL_ROOT` só é necessário nesse modo alternativo.
 
 ## Chaves de API (.env)
 

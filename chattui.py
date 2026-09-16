@@ -1156,45 +1156,62 @@ class ChatTUI(App):
     def _export_trilium_sync(self, markdown_body: str, conv_title: str) -> str:
         """Envia a conversa (markdown cru) pra daily note de hoje no Trilium.
 
-        Mesma lógica do trilium_agenda_diaria.py (homelab): acha a nota
-        "DD - Nome do dia" sob o root do Journal (cria se faltar) e anexa
-        o markdown ao conteúdo existente. Roda em thread própria."""
+        Caminho principal: a API de day notes do ETAPI
+        (`GET /etapi/calendar/days/<data>`) — o servidor resolve a nota do dia
+        na configuração de Journal ativa (estrutura ano/mês, idioma do título,
+        criação sob demanda), então funciona tanto em Journal plano quanto no
+        `calendarRoot` aninhado. Se o servidor não tiver day notes
+        configuradas, cai no modo antigo: acha/cria a nota "DD - Nome do dia"
+        sob o `TRILIUM_JOURNAL_ROOT`. O markdown é anexado ao conteúdo
+        existente. Roda em thread própria."""
         url = os.getenv("TRILIUM_URL", "").rstrip("/")
         token = os.getenv("TRILIUM_TOKEN", "")
         if not url or not token:
             return self.tr("trilium_env")
         root = os.getenv("TRILIUM_JOURNAL_ROOT", "").strip()
-        if not root:
-            return self.tr("trilium_root_env")
         hoje = datetime.date.today()
-        titulo = f"{hoje.day:02d} - {DIAS_SEMANA_PT[hoje.weekday()]}"
         auth = {"Authorization": f"Bearer {token}"}
         note_id = ""
+        titulo = ""
         try:
             with httpx.Client(timeout=30) as client:
-                resp = client.get(
-                    f"{url}/etapi/notes",
-                    params={"search": f'noteId.childrenOf:{root} note.title:"{titulo}"', "limit": 5},
-                    headers=auth,
-                )
-                if resp.status_code != 200:
-                    return f"[erro {resp.status_code}] ao buscar a nota do dia: {resp.text[:200]}"
-                try:
-                    results = resp.json().get("results", [])
-                except ValueError:
-                    return "[erro] resposta inesperada da busca de notas."
-                note_id = next((n.get("noteId") for n in results if n.get("title") == titulo), None)
-                if note_id is None:
-                    create = client.post(
-                        f"{url}/etapi/create-note",
-                        json={"parentNoteId": root, "title": titulo, "type": "text", "content": ""},
+                resp = client.get(f"{url}/etapi/calendar/days/{hoje.isoformat()}", headers=auth)
+                if resp.status_code == 200:
+                    try:
+                        note = resp.json()
+                    except ValueError:
+                        note = {}
+                    note_id = note.get("noteId") or ""
+                    titulo = note.get("title") or ""
+                if not note_id:
+                    # Fallback: sem day notes no servidor — comportamento antigo
+                    # (nota sob o root do Journal), com a busca na sintaxe atual.
+                    if not root:
+                        return f"{self.tr('trilium_root_env')} (day notes: HTTP {resp.status_code})"
+                    titulo = f"{hoje.day:02d} - {DIAS_SEMANA_PT[hoje.weekday()]}"
+                    resp = client.get(
+                        f"{url}/etapi/notes",
+                        params={"search": f'note.parents.noteId={root} note.title="{titulo}"', "limit": 5},
                         headers=auth,
                     )
-                    if create.status_code not in (200, 201):
-                        return f"[erro {create.status_code}] ao criar a nota do dia: {create.text[:200]}"
-                    note_id = create.json().get("note", {}).get("noteId")
-                    if not note_id:
-                        return "[erro] criação da nota não retornou noteId."
+                    if resp.status_code != 200:
+                        return f"[erro {resp.status_code}] ao buscar a nota do dia: {resp.text[:200]}"
+                    try:
+                        results = resp.json().get("results", [])
+                    except ValueError:
+                        return "[erro] resposta inesperada da busca de notas."
+                    note_id = next((n.get("noteId") for n in results if n.get("title") == titulo), None)
+                    if note_id is None:
+                        create = client.post(
+                            f"{url}/etapi/create-note",
+                            json={"parentNoteId": root, "title": titulo, "type": "text", "content": ""},
+                            headers=auth,
+                        )
+                        if create.status_code not in (200, 201):
+                            return f"[erro {create.status_code}] ao criar a nota do dia: {create.text[:200]}"
+                        note_id = create.json().get("note", {}).get("noteId")
+                        if not note_id:
+                            return "[erro] criação da nota não retornou noteId."
                 content = client.get(f"{url}/etapi/notes/{note_id}/content", headers=auth)
                 if content.status_code != 200:
                     return f"[erro {content.status_code}] ao ler o conteúdo da nota."
