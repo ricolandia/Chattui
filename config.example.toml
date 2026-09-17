@@ -64,6 +64,23 @@ api_base = "https://openrouter.ai/api/v1"
 model_id = "deepseek/deepseek-v4-flash"   # aponta pra última revisão da família V4 Flash
 api_key_env = "OPENROUTER_API_KEY"
 
+# --- Papéis (opcional) ---------------------------------------------------
+# Use modelos diferentes por função. Os valores são `name` de um [[models]]
+# acima — papel sem modelo existente é ignorado (o app avisa). Troca em
+# runtime com /papel <nome> (Ctrl+M volta ao modelo avulso).
+# Sugestões (menores funcionais → maiores, verificadas em 09/2026):
+#   ferramentas: qwen3:1.7b (1.4 GB, tools) / llama3.2:3b (2.0 GB, tools)
+#             → qwen3:8b (5.2 GB, tools) / mistral-nemo:12b (7.1 GB, tools)
+#   chat/RAG:    llama3.2:3b / qwen3:4b → qwen3:8b / mistral-nemo:12b
+#   código:      qwen2.5-coder:1.5b (986 MB) / 3b → 7b (4.7 GB) / 14b
+#   criativo:    gemma3:4b (3.3 GB) / qwen3:4b → qwen3:14b / mistral-nemo:12b
+# Sem [papeis], tudo roda no modelo atual (inclusive um endpoint de nuvem).
+# [papeis]
+# ferramentas = "ollama-qwen3-4b"
+# chat        = "ollama-llama32-3b"
+# codigo      = "ollama-coder-7b"
+# criativo    = "ollama-gemma3-4b"
+
 # --- Privacidade (opcional) ----------------------------------------------
 # Anonimiza PII (email/CPF/CNPJ/telefone) no que é ENVIADO para modelos
 # remotos: placeholders [EMAIL_1]/[CPF_2]... e restauração na resposta

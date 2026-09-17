@@ -69,6 +69,7 @@ acompanhar quando você descer (ou com Ctrl+J).
 | `/rename <título>` | renomeia a conversa atual |
 | `/export md [caminho]` | salva a conversa em `.md` (padrão: `data/exports/`; caminho custom opcional) |
 | `/export trilium` | envia a conversa pra **daily note de hoje** no Trilium (Journal), markdown cru anexado |
+| `/papel [nome\|off]` | modelos por função — `/papel` mostra o guia e as **sugestões** |
 | `/plugins` | lista os plugins carregados (e erros de carga) |
 | `/idioma pt` \| `/idioma en` | troca o idioma da interface em runtime (alias: `/language`) |
 
@@ -142,6 +143,32 @@ vez de duplicar. Fatos antigos sem embedding ganham um na primeira vez
 
 Sem endpoint de embeddings, o `/remember` mantém o comportamento simples
 (empilha). Se o embedding falhar, o fato é salvo mesmo assim e o chat avisa.
+
+## Papéis (modelos diferentes por função)
+
+Dá pra usar um modelo para *ferramentas*, outro para *chat/RAG*, outro para
+*código* e outro para *criativo* — mapeando papéis para os `name` dos seus
+`[[models]]`:
+
+```toml
+[papeis]
+ferramentas = "ollama-qwen3-4b"
+chat        = "ollama-llama32-3b"
+codigo      = "ollama-coder-7b"
+criativo    = "ollama-gemma3-4b"
+```
+
+- `/papel` mostra o guia (com exemplo) e uma **tabela de sugestões**
+  (menores funcionais → maiores, com tamanho e suporte a tools);
+  `/papel <nome>` ativa; `/papel off` desliga; Ctrl+M volta ao modelo avulso.
+- O subtitle mostra o papel ativo; o modelo fica **fixo durante o turno**
+  (trocar de papel no meio de uma geração não muda as chamadas em curso).
+- Papel apontando pra modelo inexistente é ignorado com aviso.
+- Sem `[papeis]`, tudo roda no modelo atual — inclusive um único endpoint
+  de nuvem em `[[models]]` (o caminho "API única para tudo").
+- Descobribilidade: uma dica aparece uma vez na sessão quando não há papéis
+  (`[geral] dica_papeis = false` desliga) e o campo de entrada/sidebar têm
+  tooltip citando `/papel`.
 
 ## Privacidade (anonimização de envio)
 

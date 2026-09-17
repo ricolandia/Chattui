@@ -71,6 +71,7 @@ back down (or with Ctrl+J).
 | `/rename <title>` | renames the current conversation |
 | `/export md [path]` | saves the conversation as `.md` (default: `data/exports/`; optional custom path) |
 | `/export trilium` | sends the conversation to **today's daily note** in Trilium (Journal), raw markdown appended |
+| `/papel [name\|off]` | models per job — `/papel` shows the guide and **suggestions** |
 | `/plugins` | lists loaded plugins (and load errors) |
 | `/idioma pt` \| `/idioma en` | switches the interface language at runtime (alias: `/language`) |
 
@@ -144,6 +145,33 @@ use (automatic backfill).
 Without an embeddings endpoint, `/remember` keeps the simple
 append behavior. If embedding fails, the fact is still saved and the chat
 warns about it.
+
+## Roles (different models per job)
+
+You can use one model for *tools*, another for *chat/RAG*, another for
+*code* and another for *creative* — mapping roles to the `name` of your
+`[[models]]`:
+
+```toml
+[papeis]
+ferramentas = "ollama-qwen3-4b"
+chat        = "ollama-llama32-3b"
+codigo      = "ollama-coder-7b"
+criativo    = "ollama-gemma3-4b"
+```
+
+- `/papel` prints the guide (with an example) and a **suggestions table**
+  (smallest workable → larger, with size and tools support);
+  `/papel <name>` activates; `/papel off` disables; Ctrl+M goes back to
+  the manual model.
+- The subtitle shows the active role; the model is **fixed for the turn**
+  (switching roles mid-generation doesn't change calls in flight).
+- A role pointing to a missing model is ignored with a warning.
+- Without `[papeis]`, everything runs on the current model — including a
+  single cloud endpoint in `[[models]]` (the "one API for everything" path).
+- Discoverability: a one-time hint appears when no roles are configured
+  (`[geral] dica_papeis = false` disables it) and the input/sidebar carry a
+  tooltip mentioning `/papel`.
 
 ## Privacy (upload anonymization)
 
