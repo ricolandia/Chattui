@@ -145,6 +145,30 @@ Without an embeddings endpoint, `/remember` keeps the simple
 append behavior. If embedding fails, the fact is still saved and the chat
 warns about it.
 
+## Privacy (upload anonymization)
+
+When the model is a **remote** endpoint (cloud), you can anonymize what
+leaves the machine before every call:
+
+```toml
+[privacidade]
+anonimizar_envio = true
+apenas_endpoints_remotos = true   # localhost/private IP goes through untouched
+```
+
+- Covers **email, CPF, CNPJ and phone numbers** — in message contents
+  (including memory, RAG context and tool results) **and** in tool-call
+  `arguments`.
+- Values become stable placeholders (`[EMAIL_1]`, `[CPF_2]`...) for the
+  turn; the reply is **restored** before showing in the chat and before
+  being saved to history (`🔒 anonymized upload (N items)` warns when a
+  substitution happened).
+- While streaming the text shows placeholders and is re-rendered once at
+  the end, already restored.
+- Per model: `anonimizar = true|false` in `[[models]]` overrides the global.
+- Limits: proper names aren't detectable by regex (scope is structured
+  data); the mapping is per turn (not persisted across runs).
+
 ## Per-model parameters and instructions
 
 Each `[[models]]` block in `config.toml` accepts optional fields:

@@ -64,6 +64,15 @@ api_base = "https://openrouter.ai/api/v1"
 model_id = "deepseek/deepseek-v4-flash"   # aponta pra última revisão da família V4 Flash
 api_key_env = "OPENROUTER_API_KEY"
 
+# --- Privacidade (opcional) ----------------------------------------------
+# Anonimiza PII (email/CPF/CNPJ/telefone) no que é ENVIADO para modelos
+# remotos: placeholders [EMAIL_1]/[CPF_2]... e restauração na resposta
+# exibida/persistida. Endpoints locais (localhost/IP privado) passam crus.
+# Dá pra forçar/desligar por modelo com `anonimizar = true|false` no [[models]].
+[privacidade]
+anonimizar_envio = false
+apenas_endpoints_remotos = true
+
 # --- Segurança (opcional) ------------------------------------------------
 # Bloqueia acesso à rede local/loopback no fetch_page (anti-SSRF).
 # Ligue só se quiser que o modelo leia seus próprios serviços locais.

@@ -143,6 +143,30 @@ vez de duplicar. Fatos antigos sem embedding ganham um na primeira vez
 Sem endpoint de embeddings, o `/remember` mantém o comportamento simples
 (empilha). Se o embedding falhar, o fato é salvo mesmo assim e o chat avisa.
 
+## Privacidade (anonimização de envio)
+
+Quando o modelo é um endpoint **remoto** (nuvem), dá pra anonimizar o que
+sai da máquina antes de cada chamada:
+
+```toml
+[privacidade]
+anonimizar_envio = true
+apenas_endpoints_remotos = true   # localhost/IP privado passa cru
+```
+
+- Cobre **email, CPF, CNPJ e telefone** — no conteúdo das mensagens
+  (incluindo memória, contexto do RAG e resultados de ferramentas) **e** nos
+  `arguments` das chamadas de ferramenta.
+- Os valores viram placeholders estáveis (`[EMAIL_1]`, `[CPF_2]`...) durante
+  o turno; a resposta é **restaurada** antes de aparecer no chat e de ser
+  salva no histórico (`🔒 envio anonimizado (N itens)` avisa quando houve
+  substituição).
+- Durante o streaming o texto aparece com placeholders e é re-renderizado
+  uma vez ao final, já restaurado.
+- Por modelo: `anonimizar = true|false` no `[[models]]` sobrepõe o global.
+- Limites: nomes próprios não são detectáveis por regex (escopo é dado
+  estruturado); o mapeamento vale por turno (não persiste entre execuções).
+
 ## Parâmetros e instrução por modelo
 
 Cada `[[models]]` no `config.toml` aceita campos opcionais:
