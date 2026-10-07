@@ -425,3 +425,9 @@ tmux attach -t chat
   e só depois streama a resposta final — ligeiramente mais lento que chat
   puro, mas evita a complicação de parsear tool calls fragmentados dentro
   do streaming.
+
+## ☕ Apoie o projeto
+
+**🇧🇷 Pix:** `ricardograca@ricolandia.com`  
+**💳 PayPal:** [Donate](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=ricolandia%40gmail.com&currency_code=BRL)  
+**🧡 GitHub Sponsors:** [github.com/sponsors/ricolandia](https://github.com/sponsors/ricolandia)
